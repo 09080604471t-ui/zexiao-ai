@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>数据同步工具</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; padding: 40px; max-width: 600px; margin: 0 auto; line-height: 1.6; }
+        .btn { background: #4f46e5; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 16px; cursor: pointer; }
+        .btn:disabled { background: #9ca3af; cursor: not-allowed; }
+        #log { margin-top: 20px; background: #f3f4f6; padding: 15px; border-radius: 8px; font-family: monospace; height: 300px; overflow-y: auto; }
+        .success { color: #10b981; font-weight: bold; }
+        .error { color: #ef4444; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h2>🚀 Excel 数据一键上云工具</h2>
+    <p>由于您的电脑可能有代理软件（如VPN），导致命令行同步失败。请点击下方按钮，直接在浏览器中完成同步。</p>
+    
+    <button id="syncBtn" class="btn">开始同步数据到 Laf 云端</button>
+    
+    <div id="log"></div>
+
+    <script>
+        const SECRET_KEY = 'YUTIAN_2026_SECURE_KEY';
+        const CHUNK_SIZE = 500;
+        const logEl = document.getElementById('log');
+        const btn = document.getElementById('syncBtn');
+
+        function log(msg, className = '') {
+            const div = document.createElement('div');
+            div.innerHTML = msg;
+            if (className) div.className = className;
+            logEl.appendChild(div);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            log('开始读取本地数据...');
+            try {
+                // 此时是在 Vite 的环境里，可以拉取 src/data/schools_data.json
+                const rawData = await fetch('/src/data/schools_data.json').then(r => r.json());
+                log(`成功读取到 ${rawData.length} 条数据。`);
+
+                log('正在清空云端旧数据...');
+                const clearRes = await fetch('https://dbyf4npm5d.sealoshzh.site/upload-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ secret: SECRET_KEY, action: 'clear' })
+                });
+                const clearJson = await clearRes.json();
+                if (!clearJson.success) throw new Error(clearJson.error);
+                log('✅ 旧数据已清空');
+
+                for (let i = 0; i < rawData.length; i += CHUNK_SIZE) {
+                    const chunk = rawData.slice(i, i + CHUNK_SIZE);
+                    log(`正在上传第 ${i + 1} 到 ${i + chunk.length} 条...`);
+                    const uploadRes = await fetch('https://dbyf4npm5d.sealoshzh.site/upload-data', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ secret: SECRET_KEY, action: 'insert', data: chunk })
+                    });
+                    const resJson = await uploadRes.json();
+                    if (!resJson.success) throw new Error(resJson.error);
+                    log('✅ 分片上传成功');
+                }
+
+                log('🎉 恭喜！所有数据已成功秒同步到云端数据库！', 'success');
+            } catch (err) {
+                log(`❌ 同步失败: ${err.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
